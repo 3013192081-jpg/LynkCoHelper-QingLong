@@ -758,7 +758,7 @@ class ScrubStream:
         sys.stdout.flush()
 
 
-def maybe_write_env(key, secret):
+def maybe_write_env(key, secret, appcode, gldevid):
     """交互确认后，把提取结果写入 env.json 的 secrets 段。
     设 LYNKCO_AUTO_WRITE=1（CI 场景）免确认，且 env.json 不存在时自动创建。"""
     auto = os.environ.get("LYNKCO_AUTO_WRITE") == "1"
@@ -783,6 +783,10 @@ def maybe_write_env(key, secret):
     env.setdefault("secrets", {})
     env["secrets"]["nativeAppKey"] = key
     env["secrets"]["nativeAppSecret"] = secret
+    if appcode:
+        env["secrets"]["nativeAppCode"] = appcode
+    if gldevid:
+        env["secrets"]["glDevId"] = gldevid
     with open(ENV_JSON, "w", encoding="utf-8") as f:
         json.dump(env, f, ensure_ascii=False, indent=2)
         f.write("\n")
@@ -964,7 +968,7 @@ def run_once():
             print(scrub_jdb(out))
         print("=" * 60)
 
-        return parse_field(results.get("b", "")), parse_field(results.get("c", ""))
+        return parse_field(results.get("b", "")), parse_field(results.get("c", "")), parse_field(results.get("d", "")), parse_field(results.get("e", ""))
     finally:
         print("\n[*] Killing local jdb with SIGKILL (NOT quit) ...")
         if child is not None:
@@ -985,7 +989,7 @@ def extract_main_loop():
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             print(f"\n========== 第 {attempt}/{MAX_ATTEMPTS} 次尝试 ==========")
-            key, secret = run_once()
+            key, secret, appcode, gldevid = run_once()
             if looks_valid(key) and looks_valid(secret):
                 break
             # 解析出了值但格式异常（含空格/中文/引号等）——多为 jdb 输出错位
@@ -1005,7 +1009,7 @@ def extract_main_loop():
     if key and secret:
         print(f"\n[+] 提取成功！nativeAppKey    = {mask_secret(key)}")
         print(f"           nativeAppSecret = {mask_secret(secret)}")
-        maybe_write_env(key, secret)
+        maybe_write_env(key, secret, appcode, gldevid)
     else:
         print("\n[!] 多次尝试均未提取到 b/c 字段值。排查建议：")
         print("    1. 反复在 suspend/断点阶段断开 → 多为模拟器非冷启动或平台连接"
